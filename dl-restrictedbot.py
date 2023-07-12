@@ -84,7 +84,7 @@ async def sign_in(event):
         await uclient.connect()
         data = {}
         if get(user_data, 'code_ok', False) and get(user_data, 'pass_ok', False):
-            await uclient.sign_in(user_data['phone'], user_data['code'], phone_code_hash=user_data['phone_code_hash'], password=user_data['pass'])
+            await uclient.sign_in(user_data['phone'], user_data['code'], phone_code_hash=user_data['phone_code_hash'], password=user_data['password'])
         elif get(user_data, 'code_ok', False) and not get(user_data, 'need_pass', False):
             await uclient.sign_in(user_data['phone'], user_data['code'], phone_code_hash=user_data['phone_code_hash'])
         else:
@@ -157,6 +157,14 @@ async def handler(event):
             "last_name": sender.last_name,
             "username": sender.username,
         })
+        return
+    if get(user_data, 'need_pass', False) and get(user_data, 'code_ok', False) and not get(user_data, 'pass_ok', False):
+        data = {
+            'password': event.message.text
+        }
+        await event.edit(strings['ask_ok']+data['password'], buttons=yesno('pass'))
+        database.update_one({'_id': user_data['_id']}, {'$set': data})
+        return
 @bot.on(events.CallbackQuery)
 async def handler(event):
     try:
