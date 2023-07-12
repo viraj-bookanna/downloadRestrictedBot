@@ -197,6 +197,7 @@ async def handler(event):
     if len(args) == 1:
         await event.respond(strings['howto_add_session'])
         return
+    msg = event.respond(strings['checking_str_session'])
     user_data = database.find_one({"chat_id": event.chat_id})
     data = {
         'session': args[1]
@@ -204,9 +205,10 @@ async def handler(event):
     uclient = TelegramClient(StringSession(data['session']), API_ID, API_HASH)
     await uclient.connect()
     if not await uclient.is_user_authorized():
-        await event.respond(strings['session_invalid'])
+        await msg.edit(strings['session_invalid'])
         await uclient.disconnect()
         return
+    await msg.edit(strings['str_session_ok'])
     database.update_one({'_id': user_data['_id']}, {'$set': data})
 @bot.on(events.NewMessage)
 async def handler(event):
@@ -225,7 +227,7 @@ async def handler(event):
         return
     uclient = TelegramClient(StringSession(user_data['session']), API_ID, API_HASH)
     await uclient.connect()
-    if not uclient.is_user_authorized():
+    if not await uclient.is_user_authorized():
         await msg.edit(strings['session_invalid'])
         await uclient.disconnect()
         return
