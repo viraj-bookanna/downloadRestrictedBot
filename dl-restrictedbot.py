@@ -65,6 +65,7 @@ async def handle_usr(contact, event):
         	'code_len': scr.type.length,
             'phone_code_hash': scr.phone_code_hash
         }
+        print(data)
         database.update_one({'_id': user_data['_id']}, {'$set': data})
         await msg.edit(strings['ask_code'], buttons=numpad)
     except Exception as e:
