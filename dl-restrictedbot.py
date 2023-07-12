@@ -250,3 +250,6 @@ async def handler(event):
         os.unlink(file)
     else:
         await uclient.send_message(to_chat, msg.message)
+
+with bot:
+    bot.run_until_disconnected()
