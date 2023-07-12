@@ -41,6 +41,11 @@ numpad = [
     ]
 ]
 
+def intify(s):
+    try:
+        return int(s)
+    except:
+        return s
 def get(obj, key, default=None):
     try:
         return obj[key]
@@ -232,7 +237,7 @@ async def handler(event):
         await uclient.disconnect()
         return
     try:
-        chat = await uclient.get_input_entity(event.pattern_match[1])
+        chat = await uclient.get_input_entity(intify(event.pattern_match[1]))
     except Exception as e:
         await msg.edit('Error: '+repr(e))
         await uclient.disconnect()
