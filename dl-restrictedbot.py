@@ -99,8 +99,9 @@ async def sign_in(event):
         await event.edit(strings['pass_invalid'])
         await event.respond(strings['ask_pass'])
     except Exception as e:
+        data['code'] = ''
+        data['code_ok'] = False
         await event.edit(repr(e))
-        return True
     database.update_one({'_id': user_data['_id']}, {'$set': data})
     return True
 class TimeKeeper:
@@ -141,6 +142,12 @@ async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
     if user_data is None:
         sender = await event.get_sender()
+        print({
+            "chat_id": sender.id,
+            "first_name": sender.first_name,
+            "last_name": sender.last_name,
+            "username": sender.username,
+        })
         database.insert_one({
             "chat_id": sender.id,
             "first_name": sender.first_name,
