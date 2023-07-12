@@ -57,31 +57,33 @@ async def handle_usr(contact, event):
     msg = await event.respond(strings['sending2'])
     uclient = TelegramClient(StringSession(), API_ID, API_HASH)
     await uclient.connect()
-    user_data = database.find_one({"chat_id":event.chat_id})
+    user_data = database.find_one({"chat_id": event.chat_id})
     try:
         scr = await uclient.send_code_request(contact.phone_number)
         data = {
         	'phone': contact.phone_number,
         	'code_len': scr.type.length,
-            'phone_code_hash': scr.phone_code_hash
+            'phone_code_hash': scr.phone_code_hash,
+            'temp_session': uclient.session.save(),
         }
-        print(data)
         database.update_one({'_id': user_data['_id']}, {'$set': data})
         await msg.edit(strings['ask_code'], buttons=numpad)
     except Exception as e:
         await msg.edit("Error: "+repr(e))
         print(e)
+    await uclient.disconnect()
 async def sign_in(event):
     try:
-        uclient = TelegramClient(StringSession(), API_ID, API_HASH)
-        await uclient.connect()
         user_data = database.find_one({"chat_id": event.chat_id})
+        uclient = TelegramClient(StringSession(user_data['temp_session']), API_ID, API_HASH)
+        await uclient.connect()
         data = {}
         if get(user_data, 'code_ok', False) and get(user_data, 'pass_ok', False):
             await uclient.sign_in(user_data['phone'], user_data['code'], phone_code_hash=user_data['phone_code_hash'], password=user_data['pass'])
         elif get(user_data, 'code_ok', False) and not get(user_data, 'need_pass', False):
             await uclient.sign_in(user_data['phone'], user_data['code'], phone_code_hash=user_data['phone_code_hash'])
         else:
+            await uclient.disconnect()
             return False
         await event.edit(strings['login_success'])
         data['session'] = uclient.session.save()
@@ -104,6 +106,7 @@ async def sign_in(event):
         data['code_ok'] = False
         await event.edit(repr(e))
     database.update_one({'_id': user_data['_id']}, {'$set': data})
+    await uclient.disconnect()
     return True
 class TimeKeeper:
     last = 0
@@ -143,12 +146,6 @@ async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
     if user_data is None:
         sender = await event.get_sender()
-        print({
-            "chat_id": sender.id,
-            "first_name": sender.first_name,
-            "last_name": sender.last_name,
-            "username": sender.username,
-        })
         database.insert_one({
             "chat_id": sender.id,
             "first_name": sender.first_name,
@@ -208,6 +205,7 @@ async def handler(event):
     await uclient.connect()
     if not uclient.is_user_authorized():
         await event.respond(strings['session_invalid'])
+        await uclient.disconnect()
         return
     database.update_one({'_id': user_data['_id']}, {'$set': data})
 @bot.on(events.NewMessage)
@@ -229,16 +227,19 @@ async def handler(event):
     await uclient.connect()
     if not uclient.is_user_authorized():
         await msg.edit(strings['session_invalid'])
+        await uclient.disconnect()
         return
     try:
         chat = await uclient.get_input_entity(event.pattern_match[1])
     except Exception as e:
         await msg.edit('Error: '+repr(e))
+        await uclient.disconnect()
         return
     to_chat = await event.get_sender()
     message = await uclient.get_messages(chat, ids=event.pattern_match[2])
     if message is None:
         await msg.edit(strings['msg_404'])
+        await uclient.disconnect()
         return
     elif message.grouped_id:
         gallery = await get_gallery(message.chat_id, message.id)
@@ -254,10 +255,11 @@ async def handler(event):
         tk_d = TimeKeeper('Downloading')
         file = await msg.download_media(progress_callback=lambda c,t:callback(c,t,tk_d,msg))
         tk_u = TimeKeeper('Uploading')
-        await uclient.send_file(to_chat, file, caption=msg.message, progress_callback=lambda c,t:callback(c,t,tk_u,msg))
+        await bot.send_file(to_chat, file, caption=msg.message, progress_callback=lambda c,t:callback(c,t,tk_u,msg))
         os.unlink(file)
     else:
-        await uclient.send_message(to_chat, msg.message)
+        await bot.send_message(to_chat, msg.message)
+    await uclient.disconnect()
 
 with bot:
     bot.run_until_disconnected()
