@@ -203,7 +203,7 @@ async def handler(event):
     }
     uclient = TelegramClient(StringSession(data['session']), API_ID, API_HASH)
     await uclient.connect()
-    if not uclient.is_user_authorized():
+    if not await uclient.is_user_authorized():
         await event.respond(strings['session_invalid'])
         await uclient.disconnect()
         return
