@@ -243,7 +243,7 @@ async def handler(event):
         await uclient.disconnect()
         return
     to_chat = await event.get_sender()
-    message = await uclient.get_messages(chat, ids=event.pattern_match[2])
+    message = await uclient.get_messages(chat, ids=intify(event.pattern_match[2]))
     if message is None:
         await msg.edit(strings['msg_404'])
         await uclient.disconnect()
