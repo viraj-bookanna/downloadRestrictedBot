@@ -197,7 +197,7 @@ async def handler(event):
     if len(args) == 1:
         await event.respond(strings['howto_add_session'])
         return
-    msg = event.respond(strings['checking_str_session'])
+    msg = await event.respond(strings['checking_str_session'])
     user_data = database.find_one({"chat_id": event.chat_id})
     data = {
         'session': args[1]
