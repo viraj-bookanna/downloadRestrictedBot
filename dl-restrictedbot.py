@@ -179,7 +179,7 @@ async def handler(event):
     if press=="nopass":
         return
     if not await sign_in(event):
-        await event.edit(strings['ask_code']+user_data['code'], buttons=numpad)
+        await event.edit(strings['ask_code']+data['code'], buttons=numpad)
 @bot.on(events.NewMessage(pattern=r"/start", func=lambda e: e.is_private))
 async def handler(event):
     await event.respond(strings['hello'])
