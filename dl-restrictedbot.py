@@ -172,7 +172,9 @@ async def handler(event):
     except:
         return
     user_data = database.find_one({"chat_id": event.chat_id})
-    data = {}
+    data = {
+        'code': get(user_data, 'code', '')
+    }
     if type(press)==int:
         data['code'] = get(user_data, 'code', '')+str(press)
         if len(data['code'])==user_data['code_len']:
