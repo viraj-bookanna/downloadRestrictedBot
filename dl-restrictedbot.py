@@ -70,6 +70,10 @@ async def handle_usr(contact, event):
         	'code_len': scr.type.length,
             'phone_code_hash': scr.phone_code_hash,
             'temp_session': uclient.session.save(),
+            'code': '',
+            'code_ok': False,
+            'password': None,
+            'pass_ok': False
         }
         database.update_one({'_id': user_data['_id']}, {'$set': data})
         await msg.edit(strings['ask_code'], buttons=numpad)
