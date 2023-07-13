@@ -14,7 +14,6 @@ API_ID = int(os.getenv("TG_API_ID"))
 API_HASH = os.getenv("TG_API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGODB_URL = os.getenv("MONGODB_URL")
-LOG_GROUP = int(os.getenv("LOG_GROUP_ID"))
 bot = TelegramClient('bot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 mongo_client = MongoClient(MONGODB_URL, server_api=ServerApi('1'))
 database = mongo_client.userdb.sessions
