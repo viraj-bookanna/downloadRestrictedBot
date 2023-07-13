@@ -150,10 +150,10 @@ def humanify(byte_size):
             return "{} {}".format(round(byte_size/1024**(i+1), 2), siz_list[i])
 async def callback(current, total, tk, message):
     progressbar = progress_bar(current/total*100)
+    h_current = humanify(current)
+    h_total = humanify(total)
     info = f"{tk.status}: {progressbar}\nComplete: {h_current}\nTotal: {h_total}"
     if tk.last != info and tk.last_edited_time+5 < time.time():
-        h_current = humanify(current)
-        h_total = humanify(total)
         await message.edit(info)
         tk.last = info
         tk.last_edited_time = time.time()
