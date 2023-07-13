@@ -5,3 +5,4 @@ cryptg
 pillow
 aiohttp
 hachoir
+asyncio

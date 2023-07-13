@@ -1,4 +1,4 @@
-import logging,os,time,json,telethon
+import logging,os,time,json,telethon,asyncio
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.tl.custom.button import Button
@@ -14,6 +14,7 @@ API_ID = int(os.getenv("TG_API_ID"))
 API_HASH = os.getenv("TG_API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGODB_URL = os.getenv("MONGODB_URL")
+BOT_USERNAME = None
 bot = TelegramClient('bot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 mongo_client = MongoClient(MONGODB_URL, server_api=ServerApi('1'))
 database = mongo_client.userdb.sessions
@@ -160,31 +161,8 @@ async def callback(current, total, tk, message):
             tk.last_edited_time = time.time()
     except:
         pass
-async def unrestrict(event):
-    corrected_private = None
-    if event.pattern_match[1]:
-        corrected_private = '-100'+event.pattern_match[1]
-    target_chat_id = select_not_none([corrected_private, event.pattern_match[3], event.pattern_match[5]])
-    target_msg_id = select_not_none([event.pattern_match[2], event.pattern_match[4], event.pattern_match[6]])
-    log = await event.respond('please wait..')
-    user_data = database.find_one({"chat_id": event.chat_id})
-    if not get(user_data, 'logged_in', False) or user_data['session'] is None:
-        await log.edit(strings['need_login'])
-        return
-    uclient = TelegramClient(StringSession(user_data['session']), API_ID, API_HASH)
-    await uclient.connect()
-    if not await uclient.is_user_authorized():
-        await log.edit(strings['session_invalid'])
-        await uclient.disconnect()
-        return
-    try:
-        chat = await uclient.get_input_entity(intify(target_chat_id))
-    except Exception as e:
-        await log.edit('Error: '+repr(e))
-        await uclient.disconnect()
-        return
+async def unrestrict(uclient, event, chat, msg, log):
     to_chat = await event.get_sender()
-    msg = await uclient.get_messages(chat, ids=intify(target_msg_id))
     if msg is None:
         await log.edit(strings['msg_404'])
         await uclient.disconnect()
@@ -216,7 +194,18 @@ async def unrestrict(event):
         await bot.send_message(to_chat, msg.message)
     await uclient.disconnect()
     await log.delete()
-
+@events.register(events.NewMessage(pattern="^/dl$"))
+async def dl_getter(event):
+    global BOT_USERNAME
+    if not event.is_reply:
+        await event.edit(strings['not_is_reply'])
+        return
+    if BOT_USERNAME is None:
+        BOT_USERNAME = (await bot.get_me()).username
+    await event.edit(strings['dl_sent'])
+    await event.client.send_message(BOT_USERNAME, f"{event.chat_id}.{event.message.reply_to_msg_id}")
+    await asyncio.sleep(2)
+    await event.delete()
 
 @bot.on(events.NewMessage(func=lambda e: e.is_private))
 async def handler(event):
@@ -305,9 +294,54 @@ async def handler(event):
         return
     elif not await sign_in(event):
         await event.edit(strings['ask_code']+login['code'], buttons=numpad)
+@bot.on(events.NewMessage(pattern="/activate", func=lambda e: e.is_private))
+async def handler(event):
+    user_data = database.find_one({"chat_id": event.chat_id})
+    if not get(user_data, 'logged_in', False) or user_data['session'] is None:
+        await log.edit(strings['need_login'])
+        return
+    uclient = TelegramClient(StringSession(user_data['session']), API_ID, API_HASH)
+    await uclient.connect()
+    if not await uclient.is_user_authorized():
+        await log.edit(strings['session_invalid'])
+        await uclient.disconnect()
+        return
+    log = await event.respond(strings['timeout_start'])
+    uclient.add_event_handler(dl_getter)
+    await asyncio.sleep(60)
+    await uclient.disconnect()
+    await log.edit(strings['timed_out'])
 @bot.on(events.NewMessage(pattern=r"^(?:https?://t.me/c/(\d+)/(\d+)|https?://t.me/([A-Za-z0-9_]+)/(\d+)|(?:(-?\d+)\.(\d+)))$", func=lambda e: e.is_private))
 async def handler(event):
-
+    corrected_private = None
+    if event.pattern_match[1]:
+        corrected_private = '-100'+event.pattern_match[1]
+    target_chat_id = intify(select_not_none([corrected_private, event.pattern_match[3], event.pattern_match[5]]))
+    target_msg_id = intify(select_not_none([event.pattern_match[2], event.pattern_match[4], event.pattern_match[6]]))
+    log = await event.respond('please wait..')
+    user_data = database.find_one({"chat_id": event.chat_id})
+    if not get(user_data, 'logged_in', False) or user_data['session'] is None:
+        await log.edit(strings['need_login'])
+        return
+    uclient = TelegramClient(StringSession(user_data['session']), API_ID, API_HASH)
+    await uclient.connect()
+    if not await uclient.is_user_authorized():
+        await log.edit(strings['session_invalid'])
+        await uclient.disconnect()
+        return
+    try:
+        if type(target_chat_id)==int and not str(target_chat_id).startswith('-100'):
+            await uclient.get_dialogs()
+        chat = await uclient.get_input_entity(target_chat_id)
+        msg = await uclient.get_messages(chat, ids=target_msg_id)
+    except Exception as e:
+        await log.edit('Error: '+repr(e))
+        await uclient.disconnect()
+        return
+    try:
+        await unrestrict(uclient, event, chat, msg, log)
+    except Exception as e:
+        await event.respond(repr(e))
 @bot.on(events.NewMessage(func=lambda e: e.is_private))
 async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
