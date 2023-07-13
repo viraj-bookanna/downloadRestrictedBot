@@ -126,7 +126,7 @@ async def sign_in(event):
     database.update_one({'_id': user_data['_id']}, {'$set': data})
     return True
 class TimeKeeper:
-    last = 0
+    last = ''
     last_edited_time = 0
     def __init__(self, status):
         self.status = status
@@ -149,13 +149,13 @@ def humanify(byte_size):
         if byte_size/1024**(i+1) < 1024:
             return "{} {}".format(round(byte_size/1024**(i+1), 2), siz_list[i])
 async def callback(current, total, tk, message):
-    percentage = current/total*100
-    if tk.last < percentage and tk.last_edited_time+5 < time.time():
-        progressbar = progress_bar(percentage)
+    progressbar = progress_bar(current/total*100)
+    info = f"{tk.status}: {progressbar}\nComplete: {h_current}\nTotal: {h_total}"
+    if tk.last != info and tk.last_edited_time+5 < time.time():
         h_current = humanify(current)
         h_total = humanify(total)
-        await message.edit(f"{tk.status}: {progressbar}\nComplete: {h_current}\nTotal: {h_total}")
-        tk.last = percentage
+        await message.edit(info)
+        tk.last = info
         tk.last_edited_time = time.time()
 
 @bot.on(events.NewMessage(func=lambda e: e.is_private))
