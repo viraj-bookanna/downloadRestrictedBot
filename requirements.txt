@@ -1,3 +1,7 @@
 telethon
 python-dotenv
 pymongo
+cryptg
+pillow
+aiohttp
+hachoir
