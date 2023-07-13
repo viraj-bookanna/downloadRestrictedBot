@@ -5,7 +5,7 @@ from telethon.tl.custom.button import Button
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-from strings import strings
+from strings import strings,direct_reply
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 load_dotenv(override=True)
@@ -41,6 +41,10 @@ numpad = [
     ]
 ]
 
+def select_not_none(l):
+    for i in l:
+        if i is not None:
+            return i
 def intify(s):
     try:
         return int(s)
@@ -96,6 +100,8 @@ async def sign_in(event):
         else:
             return False
         data['session'] = uclient.session.save()
+        data['logged_in'] = True
+        login = {}
         await event.edit(strings['login_success'])
     except telethon.errors.PhoneCodeInvalidError as e:
         await event.edit(strings['code_invalid'])
@@ -153,7 +159,7 @@ async def callback(current, total, tk, message):
         tk.last = percentage
         tk.last_edited_time = time.time()
 
-@bot.on(events.NewMessage)
+@bot.on(events.NewMessage(func=lambda e: e.is_private))
 async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
     if user_data is None:
@@ -164,20 +170,28 @@ async def handler(event):
             "last_name": sender.last_name,
             "username": sender.username,
         })
-@bot.on(events.NewMessage(pattern=r"/start", func=lambda e: e.is_private))
-async def handler(event):
-    await event.respond(strings['hello'])
-    raise events.StopPropagation
+    if event.message.text in direct_reply:
+        await event.respond(direct_reply[event.message.text])
+        raise events.StopPropagation
 @bot.on(events.NewMessage(pattern=r"/login", func=lambda e: e.is_private))
 async def handler(event):
     await event.respond(strings['ask_phone'], buttons=[Button.request_phone("SHARE CONTACT", resize=True, single_use=True)])
+    raise events.StopPropagation
+@bot.on(events.NewMessage(pattern=r"/logout", func=lambda e: e.is_private))
+async def handler(event):
+    user_data = database.find_one({"chat_id": event.chat_id})
+    data = {
+        'logged_in': False,
+        'login': '{}',
+    }
+    database.update_one({'_id': user_data['_id']}, {'$set': data})
+    await event.respond(strings['logged_out'])
     raise events.StopPropagation
 @bot.on(events.NewMessage(pattern=r"/add_session", func=lambda e: e.is_private))
 async def handler(event):
     args = event.message.text.split(' ', 1)
     if len(args) == 1:
-        await event.respond(strings['howto_add_session'])
-        raise events.StopPropagation
+        return
     msg = await event.respond(strings['checking_str_session'])
     user_data = database.find_one({"chat_id": event.chat_id})
     data = {
@@ -192,7 +206,7 @@ async def handler(event):
     await msg.edit(strings['str_session_ok'])
     database.update_one({'_id': user_data['_id']}, {'$set': data})
     raise events.StopPropagation
-@bot.on(events.NewMessage)
+@bot.on(events.NewMessage(func=lambda e: e.is_private))
 async def handler(event):
     if event.message.contact:
         if event.message.contact.user_id==event.chat.id:
@@ -200,7 +214,7 @@ async def handler(event):
         else:
             await event.respond(strings['wrong_phone'])
         raise events.StopPropagation
-@bot.on(events.CallbackQuery)
+@bot.on(events.CallbackQuery(func=lambda e: e.is_private))
 async def handler(event):
     try:
         press = json.loads(event.data.decode())['press']
@@ -232,51 +246,66 @@ async def handler(event):
         return
     elif not await sign_in(event):
         await event.edit(strings['ask_code']+login['code'], buttons=numpad)
-@bot.on(events.NewMessage(pattern=r"^(-?\d+)\.(\d+)$", func=lambda e: e.is_private))
+@bot.on(events.NewMessage(pattern=r"^(?:https?://t.me/c/(\d+)/(\d+)|https?://t.me/([A-Za-z0-9_]+)/(\d+)|(?:(-?\d+)\.(\d+)))$", func=lambda e: e.is_private))
 async def handler(event):
-    msg = await event.respond('please wait..')
+    corrected_private = None
+    if event.pattern_match[1]:
+        corrected_private = '-100'+event.pattern_match[1]
+    target_chat_id = select_not_none([corrected_private, event.pattern_match[3], event.pattern_match[5]])
+    target_msg_id = select_not_none([event.pattern_match[2], event.pattern_match[4], event.pattern_match[6]])
+    log = await event.respond('please wait..')
     user_data = database.find_one({"chat_id": event.chat_id})
-    if user_data['session'] is None:
-        await msg.edit(strings['need_login'])
+    if not get(user_data, 'logged_in', False) or user_data['session'] is None:
+        await log.edit(strings['need_login'])
         return
     uclient = TelegramClient(StringSession(user_data['session']), API_ID, API_HASH)
     await uclient.connect()
     if not await uclient.is_user_authorized():
-        await msg.edit(strings['session_invalid'])
+        await log.edit(strings['session_invalid'])
         await uclient.disconnect()
         return
     try:
-        chat = await uclient.get_input_entity(intify(event.pattern_match[1]))
+        chat = await uclient.get_input_entity(intify(target_chat_id))
     except Exception as e:
-        await msg.edit('Error: '+repr(e))
+        await log.edit('Error: '+repr(e))
         await uclient.disconnect()
         return
     to_chat = await event.get_sender()
-    message = await uclient.get_messages(chat, ids=intify(event.pattern_match[2]))
-    if message is None:
-        await msg.edit(strings['msg_404'])
+    msg = await uclient.get_messages(chat, ids=intify(target_msg_id))
+    if msg is None:
+        await log.edit(strings['msg_404'])
         await uclient.disconnect()
         return
-    elif message.grouped_id:
-        gallery = await get_gallery(message.chat_id, message.id)
-        album = list()
-        for _ in gallery:
+    elif msg.grouped_id:
+        gallery = await get_gallery(uclient, msg.chat_id, msg.id)
+        album = []
+        for sub_msg in gallery:
             tk_d = TimeKeeper('Downloading')
-            album.append(await msg.download_media(progress_callback=lambda c,t:callback(c,t,tk_d,msg)))
+            album.append(await sub_msg.download_media(progress_callback=lambda c,t:callback(c,t,tk_d,log)))
         tk_u = TimeKeeper('Uploading')
-        await bot.send_file(to_chat, album, caption=msg.message, progress_callback=lambda c,t:callback(c,t,tk_u,msg))
+        await bot.send_file(to_chat, album, caption=msg.message, progress_callback=lambda c,t:callback(c,t,tk_u,log))
         for file in album:
             os.unlink(file)
     elif msg.media is not None:
+        print(msg.media)
+        print(msg.file)
         tk_d = TimeKeeper('Downloading')
-        file = await msg.download_media(progress_callback=lambda c,t:callback(c,t,tk_d,msg))
+        file = await msg.download_media(progress_callback=lambda c,t:callback(c,t,tk_d,log))
+        tk_d = TimeKeeper('Downloading')
+        thumb = await msg.download_media(thumb=-1, progress_callback=lambda c,t:callback(c,t,tk_d,log))
         tk_u = TimeKeeper('Uploading')
-        await bot.send_file(to_chat, file, caption=msg.message, progress_callback=lambda c,t:callback(c,t,tk_u,msg))
+        tgfile = await bot.upload_file(file, file_name=msg.file.name, progress_callback=lambda c,t:callback(c,t,tk_u,log))
+        try:
+            await bot.send_file(to_chat, tgfile, thumb=thumb, supports_streaming=msg.document.attributes.supports_streaming, caption=msg.message)
+        except:
+            await bot.send_file(to_chat, tgfile, thumb=thumb, caption=msg.message)
         os.unlink(file)
+        os.unlink(thumb)
     else:
         await bot.send_message(to_chat, msg.message)
     await uclient.disconnect()
-@bot.on(events.NewMessage)
+    await log.delete()
+@bot.on(events.NewMessage(func=lambda e: e.is_private))
 async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
     if 'login' not in user_data:
