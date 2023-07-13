@@ -17,7 +17,7 @@ strings = {
     'str_session_ok': "The string session is valid and successfully added ✅",
     'checking_str_session': "Validating the String Session ⏳",
     'logged_out': "Logged out successfully ☑️",
-    'help': "__AUTHORIZATION__🔐\nThis bot requires to access your account by logging into it. This is because we can't access your chats in other ways.\nYou have to share your contact and provide the OTP for logging in (in case of 2-factor authentication is active, you have to provide your password too)\n\n__HOW TO USE__📝\n1. if you can copy the link for the required message, then you can copy it and send to me\n2. in case you can't get link, you have to send me the chat_id and the message_id required using following syntax:\n    <chat_id>.<message_id>\n\nthats all\nhave fun👊\n\nPrivacy policy: /privacy_policy",
+    'help': "🔐 __AUTHORIZATION__\nThis bot requires to access your account by /login into it. This is because we can't access your chats in other ways.\nYou have to share your contact and provide the OTP for logging in (in case of 2-factor authentication is active, you have to provide your password too)\n\n📝 __HOW TO USE__\n1. if you can copy the link for the required message, then you can copy it and send to me\n2. in case you can't get link, you have to send me the chat_id and the message_id required using following syntax:\n    <chat_id>.<message_id>\n\nthats all\nhave fun 👊\n\nPrivacy policy: /privacy_policy",
     'privacy_policy': "⚠️ All the media downloaded are obtained from your account. we don't care what you upload, and also we don't log them. You solely bear all the consequenses",
 }
 direct_reply = {
