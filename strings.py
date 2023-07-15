@@ -25,7 +25,7 @@ strings = {
     'timed_out': "time's up ⏳",
     'not_is_reply': "You need to send this as a reply",
     'dl_sent': "task added to bot",
-    'already_logged_in': "You are already logged in\n if you want to login again, /logout to proceed.",
+    'already_logged_in': "You are already logged in.\nIf you want to login again, /logout to proceed.",
 }
 direct_reply = {
     '/start': strings['hello'],
