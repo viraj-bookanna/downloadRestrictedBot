@@ -223,17 +223,19 @@ async def handler(event):
         raise events.StopPropagation
 @bot.on(events.NewMessage(pattern=r"/login", func=lambda e: e.is_private))
 async def handler(event):
+    user_data = database.find_one({"chat_id": event.chat_id})
+    if get(user_data, 'logged_in', False):
+        await event.respond(strings['already_logged_in'])
+        raise events.StopPropagation
     await event.respond(strings['ask_phone'], buttons=[Button.request_phone("SHARE CONTACT", resize=True, single_use=True)])
     raise events.StopPropagation
 @bot.on(events.NewMessage(pattern=r"/logout", func=lambda e: e.is_private))
 async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
-    data = {
-        'logged_in': False,
-        'login': '{}',
-    }
-    database.update_one({'_id': user_data['_id']}, {'$set': data})
-    await event.respond(strings['logged_out'])
+    if not get(user_data, 'logged_in', False):
+        await event.respond(strings['need_login'])
+        raise events.StopPropagation
+    await event.respond(strings['logout_sure'], buttons=yesno('logout'))
     raise events.StopPropagation
 @bot.on(events.NewMessage(pattern=r"/add_session", func=lambda e: e.is_private))
 async def handler(event):
@@ -243,7 +245,8 @@ async def handler(event):
     msg = await event.respond(strings['checking_str_session'])
     user_data = database.find_one({"chat_id": event.chat_id})
     data = {
-        'session': args[1]
+        'session': args[1],
+        'logged_in': True
     }
     uclient = TelegramClient(StringSession(data['session']), API_ID, API_HASH)
     await uclient.connect()
@@ -287,6 +290,17 @@ async def handler(event):
         login['pass_ok'] = False
         login['need_pass'] = True
         await event.edit(strings['ask_pass'])
+    elif press=="yeslogout":
+        data = {
+            'logged_in': False,
+            'login': '{}',
+        }
+        database.update_one({'_id': user_data['_id']}, {'$set': data})
+        await event.edit(strings['logged_out'])
+        return
+    elif press=="nologout":
+        await event.edit(strings['not_logged_out'])
+        return
     database.update_one({'_id': user_data['_id']}, {'$set': {'login': json.dumps(login)}})
     if len(login['code'])==login['code_len'] and not get(login, 'code_ok', False):
         await event.edit(strings['ask_ok']+login['code'], buttons=yesno('code'))
