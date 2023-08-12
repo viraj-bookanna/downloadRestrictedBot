@@ -1,4 +1,4 @@
-import logging,os,time,json,telethon,asyncio
+import logging,os,time,json,telethon,asyncio,re
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.tl.custom.button import Button
@@ -40,6 +40,17 @@ numpad = [
         Button.inline("⌫", '{"press":"clear"}')
     ]
 ]
+settings_keyboard = [
+    [  
+        Button.inline("Download command", '{"page":"settings","press":"dlcmd"}')
+    ],
+    [
+        Button.inline("Download message", '{"page":"settings","press":"dlmsg"}')
+    ],
+    [
+        Button.inline("Info delete delay", '{"page":"settings","press":"dltime"}')
+    ],
+]
 
 def select_not_none(l):
     for i in l:
@@ -55,10 +66,10 @@ def get(obj, key, default=None):
         return obj[key]
     except:
         return default
-def yesno(x):
+def yesno(x,page='def'):
     return [
-        [Button.inline("Yes", '{{"press":"yes{}"}}'.format(x))],
-        [Button.inline("No", '{{"press":"no{}"}}'.format(x))]
+        [Button.inline("Yes", '{{"page":"{}","press":"yes{}"}}'.format(page,x))],
+        [Button.inline("No", '{{"page":"{}","press":"no{}"}}'.format(page,x))]
     ]
 async def handle_usr(contact, event):
     msg = await event.respond(strings['sending1'], buttons=Button.clear())
@@ -83,6 +94,69 @@ async def handle_usr(contact, event):
     except Exception as e:
         await msg.edit("Error: "+repr(e))
     await uclient.disconnect()
+async def handle_settings(event, jdata):
+    user_data = database.find_one({"chat_id": event.chat_id})
+    settings = get(user_data, 'settings', {})
+    print(settings)
+    if jdata['press'] == 'home':
+        text = strings['settings_home']
+        buttons = settings_keyboard
+    elif jdata['press'] in ['dlcmd', 'nodlcmd']:
+        text = strings['ask_new_dlcmd']
+        buttons = [
+            [Button.inline("🚫 Cancel", '{"page":"settings","press":"home"}')],
+        ]
+        settings['pending'] = 'dlcmd'
+        settings['pending_pattern'] = '.*'
+    elif jdata['press'] == 'yesdlcmd':
+        text = strings['dlcmd_saved']
+        buttons = [
+            [Button.inline("<< Back to settings", '{"page":"settings","press":"home"}')],
+        ]
+        settings['dl_command'] = user_data['settings']['last_input']
+        settings['pending'] = None
+    elif jdata['press'] in ['dlmsg', 'nodlmsg']:
+        text = strings['ask_new_dlmsg']
+        buttons = [
+            [Button.inline("🚫 Cancel", '{"page":"settings","press":"home"}')],
+        ]
+        settings['pending'] = 'dlmsg'
+        settings['pending_pattern'] = '.*'
+    elif jdata['press'] == 'yesdlmsg':
+        text = strings['dlmsg_saved']
+        buttons = [
+            [Button.inline("<< Back to settings", '{"page":"settings","press":"home"}')],
+        ]
+        settings['dl_message'] = user_data['settings']['last_input']
+        settings['pending'] = None
+    elif jdata['press'] in ['dltime', 'nodltime']:
+        text = strings['ask_new_dltime']
+        buttons = [
+            [Button.inline("🚫 Cancel", '{"page":"settings","press":"home"}')],
+        ]
+        settings['pending'] = 'dltime'
+        settings['pending_pattern'] = '^(?:[0-5]|999)$'
+    elif jdata['press'] == 'yesdltime':
+        text = strings['dlmsg_saved']
+        buttons = [
+            [Button.inline("<< Back to settings", '{"page":"settings","press":"home"}')],
+        ]
+        t = int(user_data['settings']['last_input'])
+        if t == 999 or 0 <= t <= 5:
+            settings['dl_sleep'] = t
+            settings['pending'] = None
+        else:
+            text = strings['non_match_pattern']
+            buttons = [
+                [Button.inline("🚫 Cancel", '{"page":"settings","press":"home"}')],
+            ]
+            settings['pending'] = 'dltime'
+            settings['pending_pattern'] = '^(?:[0-5]|999)$'
+    else:
+        return
+    print('updated: ', settings)
+    database.update_one({'_id': user_data['_id']}, {'$set': {'settings': settings}})
+    await event.edit(text, buttons=buttons)
 async def sign_in(event):
     try:
         user_data = database.find_one({"chat_id": event.chat_id})
@@ -194,17 +268,28 @@ async def unrestrict(uclient, event, chat, msg, log):
         await bot.send_message(to_chat, msg.message)
     await uclient.disconnect()
     await log.delete()
-@events.register(events.NewMessage(pattern="^/dl$"))
+@events.register(events.NewMessage(outgoing=True))
 async def dl_getter(event):
+    user_data = database.find_one({"chat_id": event.message.from_id.user_id})
+    settings = get(user_data, 'settings', {})
+    if event.message.text != get(settings, 'dl_command', "/dl"):
+        return
     global BOT_USERNAME
     if not event.is_reply:
         await event.edit(strings['not_is_reply'])
         return
     if BOT_USERNAME is None:
         BOT_USERNAME = (await bot.get_me()).username
-    await event.edit(strings['dl_sent'])
     await event.client.send_message(BOT_USERNAME, f"{event.chat_id}.{event.message.reply_to_msg_id}")
-    await asyncio.sleep(2)
+    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': False}})
+    t = get(settings, 'dl_sleep', 2)
+    if t == 0:
+        await event.delete()
+        return
+    await event.edit(get(settings, 'dl_message', strings['dl_sent']))
+    if t == 999:
+        return
+    await asyncio.sleep(t)
     await event.delete()
 
 @bot.on(events.NewMessage(func=lambda e: e.is_private))
@@ -228,6 +313,11 @@ async def handler(event):
         await event.respond(strings['already_logged_in'])
         raise events.StopPropagation
     await event.respond(strings['ask_phone'], buttons=[Button.request_phone("SHARE CONTACT", resize=True, single_use=True)])
+    raise events.StopPropagation
+@bot.on(events.NewMessage(pattern=r"/settings", func=lambda e: e.is_private))
+async def handler(event):
+    user_data = database.find_one({"chat_id": event.chat_id})
+    await event.reply(strings['settings_home'], buttons=settings_keyboard)
     raise events.StopPropagation
 @bot.on(events.NewMessage(pattern=r"/logout", func=lambda e: e.is_private))
 async def handler(event):
@@ -268,7 +358,11 @@ async def handler(event):
 @bot.on(events.CallbackQuery(func=lambda e: e.is_private))
 async def handler(event):
     try:
-        press = json.loads(event.data.decode())['press']
+        evnt_dta = json.loads(event.data.decode())
+        if get(evnt_dta, 'page', '') == 'settings':
+            await handle_settings(event, evnt_dta)
+            return
+        press = evnt_dta['press']
     except:
         return
     user_data = database.find_one({"chat_id": event.chat_id})
@@ -312,18 +406,24 @@ async def handler(event):
 async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
     if not get(user_data, 'logged_in', False) or user_data['session'] is None:
-        await log.edit(strings['need_login'])
+        await event.respond(strings['need_login'])
         return
+    if get(user_data, 'activated', False):
+        await event.respond(strings['already_activated'])
+        return
+    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': True}})
     uclient = TelegramClient(StringSession(user_data['session']), API_ID, API_HASH)
     await uclient.connect()
     if not await uclient.is_user_authorized():
-        await log.edit(strings['session_invalid'])
+        await event.respond(strings['session_invalid'])
         await uclient.disconnect()
         return
-    log = await event.respond(strings['timeout_start'])
+    settings = get(user_data, 'settings', {})
+    log = await event.respond(strings['timeout_start'].format(get(settings, 'dl_command', '\dl')))
     uclient.add_event_handler(dl_getter)
     await asyncio.sleep(60)
     await uclient.disconnect()
+    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': False}})
     await log.edit(strings['timed_out'])
 @bot.on(events.NewMessage(pattern=r"^(?:https?://t.me/c/(\d+)/(\d+)|https?://t.me/([A-Za-z0-9_]+)/(\d+)|(?:(-?\d+)\.(\d+)))$", func=lambda e: e.is_private))
 async def handler(event):
@@ -359,9 +459,7 @@ async def handler(event):
 @bot.on(events.NewMessage(func=lambda e: e.is_private))
 async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
-    if 'login' not in user_data:
-        return
-    login = json.loads(user_data['login'])
+    login = json.loads(get(user_data, 'login', '{}'))
     if get(login, 'code_ok', False) and get(login, 'need_pass', False) and not get(login, 'pass_ok', False):
         data = {
             'password': event.message.text
@@ -369,6 +467,14 @@ async def handler(event):
         await event.respond(strings['ask_ok']+data['password'], buttons=yesno('pass'))
         database.update_one({'_id': user_data['_id']}, {'$set': data})
         return
-
+    elif get(get(user_data, 'settings', {}), 'pending', None) is not None:
+        if not re.match(user_data['settings']['pending_pattern'], event.message.text):
+            await event.respond(strings['non_match_pattern'])
+            return
+        settings = user_data['settings']
+        settings['last_input'] = event.message.text
+        await event.respond(strings['ask_ok']+event.message.text, buttons=yesno(user_data['settings']['pending'],'settings'))
+        database.update_one({'_id': user_data['_id']}, {'$set': {'settings': settings}})
+        return
 with bot:
     bot.run_until_disconnected()
