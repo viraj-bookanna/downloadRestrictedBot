@@ -422,7 +422,7 @@ async def handler(event):
         await uclient.disconnect()
         return
     settings = get(user_data, 'settings', {})
-    log = await event.respond(strings['timeout_start'].format(get(settings, 'dl_command', '\dl')))
+    log = await event.respond(strings['timeout_start'].format(get(settings, 'dl_command', '/dl')))
     uclient.add_event_handler(dl_getter)
     await asyncio.sleep(60)
     await uclient.disconnect()
