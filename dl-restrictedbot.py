@@ -17,7 +17,10 @@ MONGODB_URL = os.getenv("MONGODB_URL")
 BOT_USERNAME = None
 bot = TelegramClient('bot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 mongo_client = MongoClient(MONGODB_URL, server_api=ServerApi('1'))
+download_folder = 'files'
 database = mongo_client.userdb.sessions
+if not os.path.isdir(download_folder):
+    os.makedirs(download_folder)
 numpad = [
     [  
         Button.inline("1", '{"press":1}'), 
@@ -246,16 +249,16 @@ async def unrestrict(uclient, event, chat, msg, log):
         album = []
         for sub_msg in gallery:
             tk_d = TimeKeeper('Downloading')
-            album.append(await sub_msg.download_media(progress_callback=lambda c,t:callback(c,t,tk_d,log)))
+            album.append(await sub_msg.download_media(download_folder, progress_callback=lambda c,t:callback(c,t,tk_d,log)))
         tk_u = TimeKeeper('Uploading')
         await bot.send_file(to_chat, album, caption=msg.message, progress_callback=lambda c,t:callback(c,t,tk_u,log))
         for file in album:
             os.unlink(file)
     elif msg.media is not None and msg.file is not None:
         tk_d = TimeKeeper('Downloading')
-        file = await msg.download_media(progress_callback=lambda c,t:callback(c,t,tk_d,log))
+        file = await msg.download_media(download_folder, progress_callback=lambda c,t:callback(c,t,tk_d,log))
         tk_d = TimeKeeper('Downloading')
-        thumb = await msg.download_media(thumb=-1, progress_callback=lambda c,t:callback(c,t,tk_d,log))
+        thumb = await msg.download_media(download_folder, thumb=-1, progress_callback=lambda c,t:callback(c,t,tk_d,log))
         tk_u = TimeKeeper('Uploading')
         tgfile = await bot.upload_file(file, file_name=msg.file.name, progress_callback=lambda c,t:callback(c,t,tk_u,log))
         try:
