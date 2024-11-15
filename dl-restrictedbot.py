@@ -414,13 +414,13 @@ async def handler(event):
     if get(user_data, 'activated', False):
         await event.respond(strings['already_activated'])
         return
-    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': True}})
     uclient = TelegramClient(StringSession(user_data['session']), API_ID, API_HASH)
     await uclient.connect()
     if not await uclient.is_user_authorized():
         await event.respond(strings['session_invalid'])
         await uclient.disconnect()
         return
+    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': True}})
     settings = get(user_data, 'settings', {})
     log = await event.respond(strings['timeout_start'].format(get(settings, 'dl_command', '/dl')))
     uclient.add_event_handler(dl_getter)
