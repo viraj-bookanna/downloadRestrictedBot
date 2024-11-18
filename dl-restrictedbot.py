@@ -140,7 +140,7 @@ async def handle_settings(event, jdata):
         settings['pending'] = 'dltime'
         settings['pending_pattern'] = '^(?:[0-5]|999)$'
     elif jdata['press'] == 'yesdltime':
-        text = strings['dlmsg_saved']
+        text = strings['dltime_saved']
         buttons = [
             [Button.inline("<< Back to settings", '{"page":"settings","press":"home"}')],
         ]
@@ -284,7 +284,7 @@ async def dl_getter(event):
     if BOT_USERNAME is None:
         BOT_USERNAME = (await bot.get_me()).username
     await event.client.send_message(BOT_USERNAME, f"{event.chat_id}.{event.message.reply_to_msg_id}")
-    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': False}})
+    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': 0}})
     t = get(settings, 'dl_sleep', 2)
     if t == 0:
         await event.delete()
@@ -411,22 +411,21 @@ async def handler(event):
     if not get(user_data, 'logged_in', False) or user_data['session'] is None:
         await event.respond(strings['need_login'])
         return
-    if get(user_data, 'activated', False):
+    if get(user_data, 'activated', 0)+60 < time.time():
         await event.respond(strings['already_activated'])
         return
+    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': time.time()}})
     uclient = TelegramClient(StringSession(user_data['session']), API_ID, API_HASH)
     await uclient.connect()
     if not await uclient.is_user_authorized():
         await event.respond(strings['session_invalid'])
         await uclient.disconnect()
         return
-    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': True}})
     settings = get(user_data, 'settings', {})
     log = await event.respond(strings['timeout_start'].format(get(settings, 'dl_command', '/dl')))
     uclient.add_event_handler(dl_getter)
     await asyncio.sleep(60)
     await uclient.disconnect()
-    database.update_one({'_id': user_data['_id']}, {'$set': {'activated': False}})
     await log.edit(strings['timed_out'])
 @bot.on(events.NewMessage(pattern=r"^(?:https?://t.me/c/(\d+)/(\d+)|https?://t.me/([A-Za-z0-9_]+)/(\d+)|(?:(-?\d+)\.(\d+)))$", func=lambda e: e.is_private))
 async def handler(event):

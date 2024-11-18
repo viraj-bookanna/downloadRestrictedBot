@@ -31,7 +31,8 @@ strings = {
     'ask_new_dlmsg': "Send new download message ✍️",
     'ask_new_dltime': "Send a delay ⏰ before deleting status message ✍️\nonly 0-5 in seconds\nor send 999 to not delete",
     'dlcmd_saved': "New download command saved successfully ✅",
-    'dlmsg_saved': "New download command saved successfully ✅",
+    'dlmsg_saved': "New msg saved successfully ✅",
+    'dltime_saved': "New sleep saved successfully ✅",
     'non_match_pattern': "The text dosen't match the requested format ☝️\nplease retry",
     'already_activated': "There's an already running instance, no need to activate 👍",
 }
