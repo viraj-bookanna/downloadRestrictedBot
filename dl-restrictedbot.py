@@ -104,10 +104,15 @@ async def handle_settings(event, jdata):
     if jdata['press'] == 'home':
         text = strings['settings_home']
         buttons = settings_keyboard
+    elif jdata['press'] == 'cancel':
+        text = strings['settings_home']
+        buttons = settings_keyboard
+        settings['pending'] = None
+        settings['pending_pattern'] = None
     elif jdata['press'] in ['dlcmd', 'nodlcmd']:
         text = strings['ask_new_dlcmd']
         buttons = [
-            [Button.inline("🚫 Cancel", '{"page":"settings","press":"home"}')],
+            [Button.inline("🚫 Cancel", '{"page":"settings","press":"cancel"}')],
         ]
         settings['pending'] = 'dlcmd'
         settings['pending_pattern'] = '.*'
@@ -121,7 +126,7 @@ async def handle_settings(event, jdata):
     elif jdata['press'] in ['dlmsg', 'nodlmsg']:
         text = strings['ask_new_dlmsg']
         buttons = [
-            [Button.inline("🚫 Cancel", '{"page":"settings","press":"home"}')],
+            [Button.inline("🚫 Cancel", '{"page":"settings","press":"cancel"}')],
         ]
         settings['pending'] = 'dlmsg'
         settings['pending_pattern'] = '.*'
@@ -135,7 +140,7 @@ async def handle_settings(event, jdata):
     elif jdata['press'] in ['dltime', 'nodltime']:
         text = strings['ask_new_dltime']
         buttons = [
-            [Button.inline("🚫 Cancel", '{"page":"settings","press":"home"}')],
+            [Button.inline("🚫 Cancel", '{"page":"settings","press":"cancel"}')],
         ]
         settings['pending'] = 'dltime'
         settings['pending_pattern'] = '^(?:[0-5]|999)$'
@@ -151,7 +156,7 @@ async def handle_settings(event, jdata):
         else:
             text = strings['non_match_pattern']
             buttons = [
-                [Button.inline("🚫 Cancel", '{"page":"settings","press":"home"}')],
+                [Button.inline("🚫 Cancel", '{"page":"settings","press":"cancel"}')],
             ]
             settings['pending'] = 'dltime'
             settings['pending_pattern'] = '^(?:[0-5]|999)$'
@@ -411,7 +416,7 @@ async def handler(event):
     if not get(user_data, 'logged_in', False) or user_data['session'] is None:
         await event.respond(strings['need_login'])
         return
-    if get(user_data, 'activated', 0)+60 < time.time():
+    if get(user_data, 'activated', 0)+60 > time.time():
         await event.respond(strings['already_activated'])
         return
     database.update_one({'_id': user_data['_id']}, {'$set': {'activated': time.time()}})
