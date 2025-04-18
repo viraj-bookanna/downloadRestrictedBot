@@ -219,12 +219,12 @@ async def get_gallery(client, chat, msg_id):
         msg for msg in [i for i in msgs if i] # clean None
         if msg.grouped_id == msgs[9].grouped_id # 10th msg is target, guaranteed to exist
     ]
-def progress_bar(percentage):
+def progress_bar(percentage, progressbar_length=10):
     prefix_char = '█'
     suffix_char = '▒'
-    progressbar_length = 10
-    prefix = round(percentage/progressbar_length) * prefix_char
-    suffix = (progressbar_length-round(percentage/progressbar_length)) * suffix_char
+    fill = round(progressbar_length*percentage/100)
+    prefix = fill * prefix_char
+    suffix = (progressbar_length-fill) * suffix_char
     return f"{prefix}{suffix} {percentage:.2f}%"
 def humanify(byte_size):
     siz_list = ['KB', 'MB', 'GB']
