@@ -22,6 +22,7 @@ database = mongo_client.userdb.sessions
 if not os.path.isdir(download_folder):
     os.makedirs(download_folder)
 numpad = [
+    [Button.url(strings['get_code_btn'], 'https://t.me/+42777')],
     [  
         Button.inline("1", '{"press":1}'), 
         Button.inline("2", '{"press":2}'), 
