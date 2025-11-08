@@ -1,11 +1,12 @@
 import logging,os,time,json,telethon,asyncio,re
-from telethon import TelegramClient, events
+from telethon import TelegramClient,events,utils
 from telethon.sessions import StringSession
 from telethon.tl.custom.button import Button
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from strings import strings,direct_reply
+from FastTelethon import download_file,upload_file
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 load_dotenv(override=True)
@@ -214,6 +215,8 @@ class TimeKeeper:
     last_edited_time = 0
     def __init__(self, status):
         self.status = status
+    def set_status(self, status):
+        self.status = status
 async def get_gallery(client, chat, msg_id):
     msgs = await client.get_messages(chat, ids=[*range(msg_id - 9, msg_id + 10)])
     return [
@@ -244,6 +247,33 @@ async def callback(current, total, tk, message):
             tk.last_edited_time = time.time()
     except:
         pass
+def unlink_if_exists(file_path):
+    try:
+        os.unlink(file_path)
+    except:
+        pass
+async def tgfy_file(client, message, log, log_prefix=''):
+    tk = TimeKeeper(f'{log_prefix}Downloading')
+    if message.document:
+        file = os.path.join(download_folder, message.file.name if message.file.name else str(int(time.time() * 1000)))
+        with open(file, "wb") as out:
+            await download_file(client, message.document, out, progress_callback=lambda c,t:callback(c,t,tk,log))
+        thumb = await message.download_media(download_folder, thumb=-1)
+        tgthumb = None if not thumb else await bot.upload_file(thumb)
+    else:
+        file = await message.download_media(download_folder, progress_callback=lambda c,t:callback(c,t,tk,log))
+        tk.set_status(f'{log_prefix}Uploading')
+        tgfile = await bot.upload_file(file, progress_callback=lambda c,t:callback(c,t,tk,log))
+        unlink_if_exists(file)
+        return tgfile
+    tk.set_status(f'{log_prefix}Uploading')
+    with open(file, "rb") as out:
+        tgfile = await upload_file(bot, out, progress_callback=lambda c,t:callback(c,t,tk,log))
+    attributes, mime_type = utils.get_attributes(file)
+    media = telethon.tl.types.InputMediaUploadedDocument(file=tgfile,mime_type=mime_type,attributes=attributes,thumb=tgthumb,force_file=False)
+    unlink_if_exists(file)
+    unlink_if_exists(thumb)
+    return media
 async def unrestrict(uclient, event, chat, msg, log):
     to_chat = await event.get_sender()
     if msg is None:
@@ -253,26 +283,16 @@ async def unrestrict(uclient, event, chat, msg, log):
     elif msg.grouped_id:
         gallery = await get_gallery(uclient, msg.chat_id, msg.id)
         album = []
-        for sub_msg in gallery:
-            tk_d = TimeKeeper('Downloading')
-            album.append(await sub_msg.download_media(download_folder, progress_callback=lambda c,t:callback(c,t,tk_d,log)))
-        tk_u = TimeKeeper('Uploading')
-        await bot.send_file(to_chat, album, caption=msg.message, progress_callback=lambda c,t:callback(c,t,tk_u,log))
-        for file in album:
-            os.unlink(file)
+        fcount = len(gallery)
+        for i, sub_msg in enumerate(gallery):
+            album.append(await tgfy_file(uclient, sub_msg, log, f'File {i+1} of {fcount}\n'))
+        await bot.send_file(to_chat, album, caption=msg.message)
     elif msg.media is not None and msg.file is not None:
-        tk_d = TimeKeeper('Downloading')
-        file = await msg.download_media(download_folder, progress_callback=lambda c,t:callback(c,t,tk_d,log))
-        tk_d = TimeKeeper('Downloading')
-        thumb = await msg.download_media(download_folder, thumb=-1, progress_callback=lambda c,t:callback(c,t,tk_d,log))
-        tk_u = TimeKeeper('Uploading')
-        tgfile = await bot.upload_file(file, file_name=msg.file.name, progress_callback=lambda c,t:callback(c,t,tk_u,log))
+        media = await tgfy_file(uclient, msg, log)
         try:
-            await bot.send_file(to_chat, tgfile, thumb=thumb, supports_streaming=msg.document.attributes.supports_streaming, caption=msg.message)
+            await bot.send_file(to_chat, media, supports_streaming=msg.document.attributes.supports_streaming, caption=msg.message)
         except:
-            await bot.send_file(to_chat, tgfile, thumb=thumb, caption=msg.message)
-        os.unlink(file)
-        os.unlink(thumb)
+            await bot.send_file(to_chat, media, caption=msg.message)
     else:
         await bot.send_message(to_chat, msg.message)
     await uclient.disconnect()
@@ -460,10 +480,10 @@ async def handler(event):
         await log.edit('Error: '+repr(e))
         await uclient.disconnect()
         return
-    try:
-        await unrestrict(uclient, event, chat, msg, log)
-    except Exception as e:
-        await event.respond(repr(e))
+    #try:
+    await unrestrict(uclient, event, chat, msg, log)
+    #except Exception as e:
+    #    await event.respond(repr(e))
 @bot.on(events.NewMessage(func=lambda e: e.is_private))
 async def handler(event):
     user_data = database.find_one({"chat_id": event.chat_id})
